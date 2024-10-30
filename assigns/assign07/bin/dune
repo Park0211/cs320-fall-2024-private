@@ -1,0 +1,5 @@
+(executable
+ (public_name assign07)
+ (name main)
+ (libraries stdlib320 assign07 my_parser utils)
+ (package assign07))
