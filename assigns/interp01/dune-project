@@ -6,4 +6,12 @@
  (name interp01)
  (depends ocaml dune ounit2 stdlib320))
 
+(package
+ (name my_parser)
+ (depends ocaml dune ounit2 stdlib320))
+
+(package
+ (name utils)
+ (depends ocaml dune ounit2 stdlib320))
+
 (using menhir 2.1)

@@ -1,6 +1,5 @@
 (library
  (name interp01)
- (libraries stdlib320 my_parser utils)
+ (libraries stdlib320 my_parser utils menhirLib)
  (wrapped false)
  (flags (:standard -nostdlib -nopervasives -open Stdlib320)))
-
