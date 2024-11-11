@@ -17,9 +17,8 @@ rule read = parse
   | "fun" { FUN }
   | "true" { TRUE }
   | "false" { FALSE }
+  | "rec" { REC }
   | "()" { UNIT }
-  | num as n { NUM (int_of_string n) }
-  | var as v { VAR v }
   | "+" { PLUS }
   | "-" { MINUS }
   | "*" { TIMES }
@@ -33,6 +32,8 @@ rule read = parse
   | "<>" { NEQ }
   | "&&" { AND }
   | "||" { OR }
+  | num as n { NUM (int_of_string n) }
+  | var as v { VAR v }
   | "->" { ARROW }
   | "(" { LPAREN }
   | ")" { RPAREN }

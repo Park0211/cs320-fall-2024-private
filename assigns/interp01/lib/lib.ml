@@ -10,12 +10,11 @@ let rec subst (v : value) (x : string) (e : expr) : expr =
       If (subst v x e1, subst v x e2, subst v x e3)
   | Let (y, e1, e2) ->
       if x = y then
-        Let (y, subst v x e1, e2)
+        Let (y, e1, e2)
       else
         Let (y, subst v x e1, subst v x e2)
   | Fun (y, e1) ->
-      if x = y then
-        Fun (y, e1)
+      if x = y then e
       else
         Fun (y, subst v x e1)
   | App (e1, e2) ->
@@ -29,7 +28,6 @@ and value_to_expr (v : value) : expr =
   | VBool b -> if b then True else False
   | VUnit -> Unit
   | VFun (y, e) -> Fun (y, e)
-;;
 
 let rec eval (e : expr) : (value, error) result =
   match e with
@@ -37,7 +35,7 @@ let rec eval (e : expr) : (value, error) result =
   | True -> Ok (VBool true)
   | False -> Ok (VBool false)
   | Unit -> Ok VUnit
-  | Var s -> Error (UnknownVar s)
+  | Var x -> Error (UnknownVar x)
   | If (e1, e2, e3) ->
       (match eval e1 with
        | Ok (VBool b) ->
@@ -61,7 +59,7 @@ let rec eval (e : expr) : (value, error) result =
       (match eval e1 with
        | Ok v1 ->
            (match eval e2 with
-            | Ok v2 ->eval_bop b v1 v2
+            | Ok v2 -> eval_bop b v1 v2
             | Error err -> Error err)
        | Error err -> Error err)
 
@@ -82,8 +80,8 @@ and eval_bop b v1 v2 =
   | (Neq, VNum n1, VNum n2) -> Ok (VBool (n1 <> n2))
   | (And, VBool b1, VBool b2) -> Ok (VBool (b1 && b2))
   | (Or, VBool b1, VBool b2) -> Ok (VBool (b1 || b2))
-  | x, _, _ -> Error (InvalidArgs x)
-
+  | (x, _, _) -> Error (InvalidArgs x)
+  ;;
 let interp (s : string) : (value, error) result =
   match parse s with
   | Some prog -> eval prog
