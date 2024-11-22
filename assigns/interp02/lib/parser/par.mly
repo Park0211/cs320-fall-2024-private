@@ -1,5 +1,9 @@
 %{
   open Utils
+
+  let rec mk_app e = function
+    | [] -> e
+    | x :: es -> mk_app (SApp (e, x)) es
 %}
 
 // constants
@@ -62,7 +66,7 @@ toplet:
         ty = ty;
         value = e;
     } }
-  | LET REC f = VAR args = arg* ":" ty_out = ty EQ e = expr
+  | LET REC f = VAR args = arg+ ":" ty_out = ty EQ e = expr
      { {
         is_rec = true;
         name = f;
@@ -91,7 +95,7 @@ expr:
             value = e1;
             body = e2;
         } }
-  | LET REC f = VAR args = arg* ":" ty_out = ty EQ e1 = expr IN e2 = expr
+  | LET REC f = VAR args = arg+ ":" ty_out = ty EQ e1 = expr IN e2 = expr
     { 
         SLet {
             is_rec = true;
@@ -103,9 +107,12 @@ expr:
         }
     }
   | IF e1 = expr THEN e2 = expr ELSE e3 = expr { SIf (e1, e2, e3) }
-  | FUN args = arg* "->" e = expr { SFun {
-        arg = List.hd args;
-        args = args;
+  | FUN args = arg+ "->" e = expr {
+    match args with
+    | [] -> failwith "unannotated function"
+    | arg :: rest -> SFun {
+        arg = arg;
+        args = rest;
         body = e;
     } }
   | e = expr2 { e }
@@ -125,8 +132,7 @@ expr2:
   | e1 = expr2 AND e2 = expr2 { SBop (And, e1, e2) }
   | e1 = expr2 OR e2 = expr2 { SBop (Or, e1, e2) }
   | ASSERT e = expr3 { SAssert e }
-  | e = expr3 es = expr3* %prec APP
-    { List.fold_left (fun e1 e2 -> SApp (e1, e2)) e es }
+  | e = expr3 es = expr3* %prec APP { mk_app e es }
 
 expr3:
   | x = VAR { SVar x }
