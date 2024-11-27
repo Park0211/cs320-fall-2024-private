@@ -68,22 +68,22 @@ let rec type_of env = function
             | IntTy, IntTy -> Ok IntTy
             | _, IntTy -> Error (OpTyErrL (op, t2, t1))
             | IntTy, _ -> Error (OpTyErrR (op, t1, t2))
-            | _ -> Error (OpTyErrL (op, t2, t1)))
+            | _ -> Error (OpTyErrL (op, IntTy, t1)))
         | Lt | Lte | Gt | Gte ->
           (match (t1, t2) with
             | IntTy, IntTy -> Ok BoolTy
             | _, IntTy -> Error (OpTyErrL (op, t2, t1))
             | IntTy, _ -> Error (OpTyErrR (op, t1, t2))
-            | _ -> Error (OpTyErrL (op, t2, t1)))
+            | _ -> Error (OpTyErrL (op, IntTy, t2)))
         | Eq | Neq ->
-          if t1 <> t2 then Error (OpTyErrL (op, t2, t1))
+          if t1 <> t2 then Error (OpTyErrR (op, t1, t2))
           else Ok BoolTy
         | And | Or ->
           (match (t1, t2) with
             | BoolTy, BoolTy -> Ok BoolTy
             | _, BoolTy -> Error (OpTyErrL (op, t2, t1))
             | BoolTy, _ -> Error (OpTyErrR (op, t1, t2))
-            | _ -> Error (OpTyErrL (op, t2, t1)))
+            | _ -> Error (OpTyErrL (op, BoolTy, t2)))
       )
       | Error e, _ -> Error e
       | Ok _, Error e -> Error e
