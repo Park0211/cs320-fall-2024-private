@@ -194,7 +194,7 @@ and eval_bop op v1 v2 =
   | (Neq, VBool n1, VBool n2) -> VBool (n1 <> n2)
   | (And, VBool b1, VBool b2) -> VBool (b1 && b2)
   | (Or, VBool b1, VBool b2) -> VBool (b1 || b2)
-  | _ -> failwith ("Invalid binary operation: " ^ (string_of_bop op) ^ " " ^ (string_of_value v1) ^ " " ^ (string_of_value v2))
+  | _ -> failwith "Invalid binary operation " 
 
 let eval = eval Env.empty
 
