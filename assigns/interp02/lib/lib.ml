@@ -74,7 +74,7 @@ let rec type_of env = function
             | IntTy, IntTy -> Ok BoolTy
             | _, IntTy -> Error (OpTyErrL (op, t2, t1))
             | IntTy, _ -> Error (OpTyErrR (op, t1, t2))
-            | _ -> Error (OpTyErrL (op, t1, t2)))
+            | _ -> Error (OpTyErrL (op, t2, t1)))
         | Eq | Neq ->
           if t1 <> t2 then Error (OpTyErrL (op, t2, t1))
           else Ok BoolTy
@@ -85,8 +85,8 @@ let rec type_of env = function
             | BoolTy, _ -> Error (OpTyErrR (op, t1, t2))
             | _ -> Error (OpTyErrL (op, t2, t1)))
       )
-      | Ok _, Error e -> Error e
       | Error e, _ -> Error e
+      | Ok _, Error e -> Error e
     )
   | Fun (x, ty, e) -> (
     let env' = Env.add x ty env in
@@ -99,8 +99,8 @@ let rec type_of env = function
       | Ok (FunTy (ty_arg, ty_out)), Ok t2 when ty_arg = t2 -> Ok ty_out
       | Ok (FunTy (ty_arg, _)), Ok t2 -> Error (FunArgTyErr (ty_arg, t2))
       | Ok t1, Ok _ -> Error (FunAppTyErr t1)
-      | Ok _, Error e -> Error e
       | Error e, _ -> Error e
+      | Ok _, Error e -> Error e
     )
   | Let { is_rec; name; ty; value; body } -> (
     let env' = if is_rec then Env.add name ty env else env in
@@ -204,4 +204,3 @@ let interp str =
     | Error e -> Error e
   )
   | _ -> Error ParseErr
-
