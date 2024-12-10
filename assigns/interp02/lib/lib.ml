@@ -74,7 +74,7 @@ let rec type_of env = function
             | IntTy, IntTy -> Ok BoolTy
             | _, IntTy -> Error (OpTyErrL (op, t2, t1))
             | IntTy, _ -> Error (OpTyErrR (op, t1, t2))
-            | _ -> Error (OpTyErrL (op, IntTy, t2)))
+            | _ -> Error (OpTyErrL (op, IntTy, t1)))
         | Eq | Neq ->
           if t1 <> t2 then Error (OpTyErrR (op, t1, t2))
           else Ok BoolTy
@@ -83,7 +83,7 @@ let rec type_of env = function
             | BoolTy, BoolTy -> Ok BoolTy
             | _, BoolTy -> Error (OpTyErrL (op, t2, t1))
             | BoolTy, _ -> Error (OpTyErrR (op, t1, t2))
-            | _ -> Error (OpTyErrL (op, BoolTy, t2)))
+            | _ -> Error (OpTyErrL (op, BoolTy, t1)))
       )
       | Error e, _ -> Error e
       | Ok _, Error e -> Error e
