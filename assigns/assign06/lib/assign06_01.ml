@@ -12,4 +12,5 @@ let lex (str: string): tok list option =
           | None -> None
       )
   in
-  lex_helper syntax_lst []
+  lex_helper syntax_lst [] 
+
