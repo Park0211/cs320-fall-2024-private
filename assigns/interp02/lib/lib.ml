@@ -19,7 +19,7 @@ let rec desugar_expr = function
   | SNum n -> Num n
   | SVar x -> Var x
   | SFun { arg = (x, ty); args; body } ->
-    Fun (x, build_fun_ty args ty, desugar_args args (desugar_expr body))
+    Fun (x, ty, desugar_args args (desugar_expr body))
   | SApp (e1, e2) -> App (desugar_expr e1, desugar_expr e2)
   | SLet { is_rec; name; args; ty; value; body } ->
     let desugared_value = desugar_args args (desugar_expr value) in
@@ -54,7 +54,9 @@ let rec type_of env = function
     match (type_of env e1, type_of env e2, type_of env e3) with
     | Ok BoolTy, Ok t2, Ok t3 when t2 = t3 -> Ok t2
     | Ok BoolTy, Ok t2, Ok t3 -> Error (IfTyErr (t2, t3))
-    | Ok t1, _, _ -> Error (IfCondTyErr t1)
+    | Ok t1, Ok _, Ok _ -> Error (IfCondTyErr t1)
+    | Ok _, Error e, _ -> Error e
+    | Ok _, _, Error e -> Error e
     | Error e, _, _ -> Error e
   )
   | Bop (op, e1, e2) -> (
@@ -64,14 +66,14 @@ let rec type_of env = function
         | Add | Sub | Mul | Div | Mod ->
           (match (t1, t2) with
             | IntTy, IntTy -> Ok IntTy
-            | _, IntTy -> Error (OpTyErrR (op, IntTy, IntTy))
-            | IntTy, _ -> Error (OpTyErrL (op, IntTy, IntTy))
+            | _, IntTy -> Error (OpTyErrL (op, t2, t1))
+            | IntTy, _ -> Error (OpTyErrR (op, t1, t2))
             | _ -> failwith (string_of_ty t1 ^ " " ^ string_of_ty t2))
         | Lt | Lte | Gt | Gte ->
           (match (t1, t2) with
             | IntTy, IntTy -> Ok BoolTy
-            | _, IntTy -> Error (OpTyErrR (op, IntTy, IntTy))
-            | IntTy, _ -> Error (OpTyErrL (op, IntTy, IntTy))
+            | _, IntTy -> Error (OpTyErrL (op, t2, t1))
+            | IntTy, _ -> Error (OpTyErrR (op, t1, t2))
             | _ -> failwith (string_of_ty t1 ^ " " ^ string_of_ty t2))
         | Eq | Neq ->
           if t1 <> t2 then Error (OpTyErrL (op, t1, t2))
@@ -79,11 +81,12 @@ let rec type_of env = function
         | And | Or ->
           (match (t1, t2) with
             | BoolTy, BoolTy -> Ok BoolTy
-            | _, BoolTy -> Error (OpTyErrR (op, BoolTy, BoolTy))
-            | BoolTy, _ -> Error (OpTyErrL (op, BoolTy, BoolTy))
+            | _, BoolTy -> Error (OpTyErrL (op, t2, t1))
+            | BoolTy, _ -> Error (OpTyErrR (op, t1, t2))
             | _ -> failwith (string_of_ty t1 ^ " " ^ string_of_ty t2))
       )
-      | _ -> failwith "Invalid binary operation"
+      | Ok _, Error e -> Error e
+      | Error e, _ -> Error e
     )
   | Fun (x, ty, e) -> (
     let env' = Env.add x ty env in
@@ -95,23 +98,24 @@ let rec type_of env = function
       match (type_of env e1, type_of env e2) with
       | Ok (FunTy (ty_arg, ty_out)), Ok t2 when ty_arg = t2 -> Ok ty_out
       | Ok (FunTy (ty_arg, _)), Ok t2 -> Error (FunArgTyErr (ty_arg, t2))
-      | Ok t1, _ -> Error (FunAppTyErr t1)
-      | _, _ -> failwith "Invalid function application"
+      | Ok t1, Ok _ -> Error (FunAppTyErr t1)
+      | Ok _, Error e -> Error e
+      | Error e, _ -> Error e
     )
   | Let { is_rec; name; ty; value; body } -> (
     let env' = if is_rec then Env.add name ty env else env in
     match type_of env' value with
     | Ok ty_value when ty = ty_value -> 
-      let env'' = Env.add name ty env in
+      let env'' = Env.add name ty env' in
       type_of env'' body
     | Ok ty_value -> Error (LetTyErr (ty, ty_value))
-    | _ -> failwith "Invalid let binding"
+    | e -> e
   )
   | Assert e -> (
     match type_of env e with
     | Ok BoolTy -> Ok UnitTy
     | Ok t -> Error (AssertTyErr t)
-    | _ -> Error ParseErr
+    | e -> e
   )
 let type_of = type_of Env.empty
 
@@ -190,7 +194,7 @@ and eval_bop op v1 v2 =
   | (Neq, VBool n1, VBool n2) -> VBool (n1 <> n2)
   | (And, VBool b1, VBool b2) -> VBool (b1 && b2)
   | (Or, VBool b1, VBool b2) -> VBool (b1 || b2)
-  | _ -> failwith "Invalid binary operation "
+  | _ -> failwith ("Invalid binary operation: " ^ (string_of_bop op) ^ " " ^ (string_of_value v1) ^ " " ^ (string_of_value v2))
 
 let eval = eval Env.empty
 
