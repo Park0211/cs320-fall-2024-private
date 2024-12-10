@@ -55,9 +55,9 @@ let rec type_of env = function
     | Ok BoolTy, Ok t2, Ok t3 when t2 = t3 -> Ok t2
     | Ok BoolTy, Ok t2, Ok t3 -> Error (IfTyErr (t2, t3))
     | Ok t1, Ok _, Ok _ -> Error (IfCondTyErr t1)
+    | Error e, _, _ -> Error e
     | Ok _, Error e, _ -> Error e
     | Ok _, _, Error e -> Error e
-    | Error e, _, _ -> Error e
   )
   | Bop (op, e1, e2) -> (
       match (type_of env e1, type_of env e2) with
@@ -68,13 +68,13 @@ let rec type_of env = function
             | IntTy, IntTy -> Ok IntTy
             | _, IntTy -> Error (OpTyErrL (op, t2, t1))
             | IntTy, _ -> Error (OpTyErrR (op, t1, t2))
-            | _ -> failwith (string_of_ty t1 ^ " " ^ string_of_ty t2))
+            | _ -> Error (OpTyErrL (op, t1, t2)))
         | Lt | Lte | Gt | Gte ->
           (match (t1, t2) with
             | IntTy, IntTy -> Ok BoolTy
             | _, IntTy -> Error (OpTyErrL (op, t2, t1))
             | IntTy, _ -> Error (OpTyErrR (op, t1, t2))
-            | _ -> failwith (string_of_ty t1 ^ " " ^ string_of_ty t2))
+            | _ -> Error (OpTyErrL (op, t1, t2)))
         | Eq | Neq ->
           if t1 <> t2 then Error (OpTyErrL (op, t1, t2))
           else Ok BoolTy
@@ -83,7 +83,7 @@ let rec type_of env = function
             | BoolTy, BoolTy -> Ok BoolTy
             | _, BoolTy -> Error (OpTyErrL (op, t2, t1))
             | BoolTy, _ -> Error (OpTyErrR (op, t1, t2))
-            | _ -> failwith (string_of_ty t1 ^ " " ^ string_of_ty t2))
+            | _ -> Error (OpTyErrL (op, t1, t2)))
       )
       | Ok _, Error e -> Error e
       | Error e, _ -> Error e
@@ -127,10 +127,7 @@ let rec eval env = function
   | True -> VBool true
   | False -> VBool false
   | Num n -> VNum n
-  | Var x -> (
-    if (Env.mem x env) then Env.find x env
-    else failwith ("undefined variable " ^ x)
-  )
+  | Var x -> Env.find x env
   | If (e1, e2, e3) ->
     (match eval env e1 with
      | VBool true -> eval env e2
@@ -154,11 +151,11 @@ let rec eval env = function
       eval env' body
      | VClos { name = Some name; arg; body; env } ->
        let env' = Env.add name (VClos { name = Some name; arg; body; env }) (Env.add arg v2 env) in
-       (* print_endline ("body: " ^ string_of_expr body);
-       print_newline (); *)
+       (* print_endline ("body: " ^ string_of_expr body); *)
+       (* print_newline (); *)
        eval env' body
      | _ -> failwith "Application must be to a function")
-  | Let { is_rec; name; ty = _; value; body } ->(
+  | Let { is_rec; name; ty = _; value; body } -> (
       match is_rec, value with  
       | true, Fun (arg, _, e) ->
         let env' = Env.add name (VClos { name = Some name; arg = arg; body = e; env }) env in
@@ -194,7 +191,7 @@ and eval_bop op v1 v2 =
   | (Neq, VBool n1, VBool n2) -> VBool (n1 <> n2)
   | (And, VBool b1, VBool b2) -> VBool (b1 && b2)
   | (Or, VBool b1, VBool b2) -> VBool (b1 || b2)
-  | _ -> failwith "Invalid binary operation " 
+  | _ -> failwith "Invalid binary operation"
 
 let eval = eval Env.empty
 
