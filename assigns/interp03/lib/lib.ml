@@ -17,62 +17,69 @@ let get_ref r = r.contents
 let set_ref r v = r.contents <- v
 
 
-let unify (ty: ty) (consts: constr list): ty_scheme option =
-  let rec apply_subst subst ty =
-    match ty with
-    | TVar v ->
-      if Env.mem v subst then Env.find v subst else ty
-    | TList t -> TList (apply_subst subst t)
-    | TOption t -> TOption (apply_subst subst t)
-    | TPair (t1, t2) -> TPair (apply_subst subst t1, apply_subst subst t2)
-    | TFun (t1, t2) -> TFun (apply_subst subst t1, apply_subst subst t2)
-    | _ -> ty
-  in
-  let rec unify_types subst constraints =
+let rec apply_subst (subst : ty env) (ty : ty) : ty =
+  match ty with
+  | TVar v ->
+      (try Env.find v subst with Not_found -> ty)
+  | TList t ->
+      TList (apply_subst subst t)
+  | TOption t ->
+      TOption (apply_subst subst t)
+  | TPair (t1, t2) ->
+      TPair (apply_subst subst t1, apply_subst subst t2)
+  | TFun (t1, t2) ->
+      TFun (apply_subst subst t1, apply_subst subst t2)
+  | _ -> ty
+
+let rec occurs_in (v : string) (ty : ty) : bool =
+  match ty with
+  | TVar v' -> v = v'
+  | TList t -> occurs_in v t
+  | TOption t -> occurs_in v t
+  | TPair (t1, t2) | TFun (t1, t2) ->
+      occurs_in v t1 || occurs_in v t2
+  | _ -> false
+
+let unify (ty : ty) (consts : constr list) : ty_scheme option =
+  let rec unify_types (subst : ty env) (constraints : constr list) : ty env option =
     match constraints with
     | [] -> Some subst
     | (t1, t2) :: rest ->
-      let t1 = apply_subst subst t1 in
-      let t2 = apply_subst subst t2 in
-      if t1 = t2 then
-        unify_types subst rest
-      else
-        match (t1, t2) with
-        | (TVar v, _) ->
-          if occurs_check v t2 then None
-          else
-            let subst = Env.add v t2 subst in
-            unify_types subst rest
-        | (_, TVar v) ->
-          if occurs_check v t1 then None
-          else
-            let subst = Env.add v t1 subst in
-            unify_types subst rest
-        | (TFun (l1, r1), TFun (l2, r2)) ->
-          unify_types subst ((l1, l2) :: (r1, r2) :: rest)
-        | (TPair (l1, r1), TPair (l2, r2)) ->
-          unify_types subst ((l1, l2) :: (r1, r2) :: rest)
-        | (TList t1, TList t2) ->
-          unify_types subst ((t1, t2) :: rest)
-        | (TOption t1, TOption t2) ->
-          unify_types subst ((t1, t2) :: rest)
-        | _ -> None
-    and occurs_check v ty =
-      match ty with
-      | TVar v' -> v = v'
-      | TList t | TOption t -> occurs_check v t
-      | TPair (t1, t2) | TFun (t1, t2) -> occurs_check v t1 || occurs_check v t2
-      | _ -> false
+        let t1 = apply_subst subst t1 in
+        let t2 = apply_subst subst t2 in
+        if t1 = t2 then
+          unify_types subst rest
+        else
+          (match (t1, t2) with
+          | (TVar v, _) ->
+              if occurs_in v t2 then None
+              else
+                let subst' = Env.add v t2 subst in
+                unify_types subst' rest
+          | (_, TVar v) ->
+              if occurs_in v t1 then None
+              else
+                let subst' = Env.add v t1 subst in
+                unify_types subst' rest
+          | (TFun (l1, r1), TFun (l2, r2)) ->
+              unify_types subst ((l1, l2) :: (r1, r2) :: rest)
+          | (TPair (a1, b1), TPair (a2, b2)) ->
+              unify_types subst ((a1, a2) :: (b1, b2) :: rest)
+          | (TList a, TList b) ->
+              unify_types subst ((a, b) :: rest)
+          | (TOption a, TOption b) ->
+              unify_types subst ((a, b) :: rest)
+          | _ -> None)
   in
   match unify_types Env.empty consts with
   | Some subst ->
-    let ty = apply_subst subst ty in
-    let vars = free_vars ty in
-    let forall_vars = Env.to_list subst |>  List.map fst |> List.filter (fun v -> List.mem v vars) in
-    Some (Forall (forall_vars, ty))
+      let ty = apply_subst subst ty in
+      let free_ty_vars = free_vars ty in
+      let substituted_vars = Env.to_list subst |> List.map fst in
+      let generalized_vars = List.filter (fun v -> List.mem v free_ty_vars) substituted_vars in
+      Some (Forall (generalized_vars, ty))
   | None -> None
 
-(* type_of 함수 *)
 let type_of (env: stc_env) (expr: expr): ty_scheme option =
   let rec infer env expr =
     match expr with
@@ -104,10 +111,56 @@ let type_of (env: stc_env) (expr: expr): ty_scheme option =
       let env' = if is_rec then Env.add name (Forall ([], var_ty)) env else env in
       let value_ty, c1 = infer env' value in
       let scheme = generalize env value_ty in
-      let env'' = Env.add name scheme env in
+      let env'' = Env.add name scheme env' in
       let body_ty, c2 = infer env'' body in
       (body_ty, (var_ty, value_ty) :: c1 @ c2)
-    | _ -> (TUnit, [])
+    | Assert e ->
+      let ty, constraints = infer env e in
+      (TUnit, (ty, TBool) :: constraints)
+    | ESome e ->
+      let ty, constraints = infer env e in
+      (TOption ty, constraints)
+    | Bop (op, e1, e2) ->
+      let t1, c1 = infer env e1 in
+      let t2, c2 = infer env e2 in
+      let ret_ty, constraints = match op with
+        | Add | Sub | Mul | Div | Mod -> (TInt, [(t1, TInt); (t2, TInt)])
+        | AddF | SubF | MulF | DivF | PowF -> (TFloat, [(t1, TFloat); (t2, TFloat)])
+        | Cons -> (TList t1, [(t2, TList t1)])
+        | Concat -> (t1, [(t1, t2)])
+        | Lt | Lte | Gt | Gte | Neq | Eq -> (TBool, [(t1, t2)])
+        | And | Or -> (TBool, [(t1, TBool); (t2, TBool)])
+        | Comma -> (TPair (t1, t2), [])
+      in
+      (ret_ty, constraints @ c1 @ c2)
+    | If (e1, e2, e3) ->
+      let t1, c1 = infer env e1 in
+      let t2, c2 = infer env e2 in
+      let t3, c3 = infer env e3 in
+      (t2, (t1, TBool) :: (t2, t3) :: c1 @ c2 @ c3)
+    | ListMatch { matched; hd_name; tl_name; cons_case; nil_case } ->
+      let matched_ty, c1 = infer env matched in
+      let alpha = TVar (gensym ()) in
+      let env' = Env.add hd_name (Forall ([], alpha)) (Env.add tl_name (Forall ([], TList alpha)) env) in
+      let cons_case_ty, c2 = infer env' cons_case in
+      let nil_case_ty, c3 = infer env nil_case in
+      (nil_case_ty, (matched_ty, TList alpha) :: (cons_case_ty, nil_case_ty) :: c1 @ c2 @ c3)
+    | OptMatch { matched; some_name; some_case; none_case } ->
+      let matched_ty, c1 = infer env matched in
+      let alpha = TVar (gensym ()) in
+      let env' = Env.add some_name (Forall ([], alpha)) env in
+      let some_case_ty, c2 = infer env' some_case in
+      let none_case_ty, c3 = infer env none_case in
+      (none_case_ty, (matched_ty, TOption alpha) :: (some_case_ty, none_case_ty) :: c1 @ c2 @ c3)
+    | PairMatch { matched; fst_name; snd_name; case } ->
+        let matched_ty, c1 = infer env matched in
+        let case_ty, c2 = infer (Env.add fst_name (Forall ([], TVar (gensym ()))) (Env.add snd_name (Forall ([], TVar (gensym ()))) env)) case in
+        (case_ty, (matched_ty, TPair (TVar (gensym ()), TVar (gensym ()))) :: c1 @ c2)
+    | Annot (e, ty) ->
+      let inferred_ty, constraints = infer env e in
+      (ty, (inferred_ty, ty) :: constraints)
+    | Nil -> (TList (TVar (gensym ())), [])
+    | ENone -> (TOption (TVar (gensym ())), [])
   and instantiate (Forall (vars, ty)) =
     let subst = List.fold_left (fun acc var -> Env.add var (TVar (gensym ())) acc) Env.empty vars in
     let rec apply_subst ty =
